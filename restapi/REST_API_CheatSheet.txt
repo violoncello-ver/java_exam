@@ -1,0 +1,310 @@
+
+╔══════════════════════════════════════════════════════════════════════════════════╗
+║              Spring Boot REST API チートシート                                  ║
+║                          テキスト準拠版                                          ║
+╚══════════════════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 1. REST API の基本ルール
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ✅ URLは「名詞・複数形」で表す
+      OK: /users, /articles
+      NG: /getUser, /insertUser, /userList
+
+  ✅ 操作は「HTTPメソッド」で表す
+      GET    → データ取得
+      POST   → 新規作成
+      PUT    → 全体更新（全フィールド送る）
+      PATCH  → 部分更新（変えたいフィールドだけ）
+      DELETE → 削除
+
+  ✅ レスポンスは「JSONで返す」
+  ✅ サーバーは状態を覚えない（ステートレス）
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 2. HTTPステータスコード（よく使うもの）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  200 OK              → 取得・更新が成功
+  201 Created         → 新規作成が成功（POSTの後）
+  204 No Content      → 削除が成功（返すデータなし）
+  400 Bad Request     → リクエストが不正（バリデーションエラー等）
+  401 Unauthorized    → 認証失敗
+  403 Forbidden       → 権限なし
+  404 Not Found       → 指定リソースが存在しない
+  409 Conflict        → データが重複・競合
+  500 Internal Server Error → サーバー内部エラー
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 3. 登場するクラスと役割
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ┌─────────────────────────────────────────────────────────┐
+  │  フォルダ       │  ファイル名          │  役割           │
+  ├─────────────────────────────────────────────────────────┤
+  │  domain/        │  User.java           │  内部データ本体 │
+  │  dto/           │  UserRequest.java    │  入力専用       │
+  │  dto/           │  UserResponse.java   │  出力専用       │
+  │  service/       │  UserService.java    │  処理ロジック   │
+  │  controller/    │  UserApiController   │  URLと処理紐付け│
+  └─────────────────────────────────────────────────────────┘
+
+  データの流れ：
+  クライアント
+    ↓ JSON送信
+  [UserRequest]  ← バリデーションはここ
+    ↓ Controllerで変換
+  [User]         ← アプリ内部で使い回す
+    ↓ Serviceが処理
+  [UserResponse] ← クライアントに返す形に変換
+    ↓ JSON返却
+  クライアント
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 4. アノテーション一覧
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  【クラスにつけるもの】
+  ─────────────────────────────────────────────────────
+  @RestController
+    → REST APIのControllerクラスに付ける
+    → 返り値を自動でJSONに変換（シリアライズ）してくれる
+
+  @RequestMapping("/users")
+    → クラス全体のURLプレフィックスを設定
+    → メソッドのURLと合わせて最終的なURLが決まる
+    → 例: クラス="/users" + メソッド="/{id}" → /users/{id}
+
+  @CrossOrigin(origins = "*", methods = {...})
+    → 別サーバーのフロントエンドからのアクセスを許可（CORS対応）
+    → originsに許可するサーバーのURLを指定（"*"は全許可）
+
+  @Validated
+    → @RequestParamや@PathVariableのバリデーションを有効にする
+
+  【メソッドにつけるもの（HTTPメソッド対応）】
+  ─────────────────────────────────────────────────────
+  @GetMapping("/{id}")         → GET  /users/{id}
+  @GetMapping("/search")       → GET  /users/search
+  @PostMapping("")             → POST /users
+  @PutMapping("/{id}")         → PUT  /users/{id}
+  @DeleteMapping("/{id}")      → DELETE /users/{id}
+
+  ※ @RequestMappingはGET/POSTなど全メソッドを受け付けるのでREST APIには使わない
+    （クラスへの付与はOK）
+
+  【引数につけるもの（パラメータ受け取り）】
+  ─────────────────────────────────────────────────────
+  @PathVariable Integer id
+    → URLの {id} の値を受け取る
+    → 例: /users/5 → id = 5
+
+  @RequestBody UserRequest request
+    → リクエストのJSONボディをDTOに変換して受け取る（デシリアライズ）
+    → POST, PUTで使う
+
+  @RequestParam(required = false) String name
+    → ?name=xxx のクエリパラメータを受け取る
+    → required=false で省略可にできる
+
+  @Valid @ModelAttribute UserSearchCriteria criteria
+    → クエリパラメータをDTOクラスでまとめて受け取る
+    → @Valid でDTOのバリデーションも実行される
+
+  @Valid
+    → @RequestBody や @ModelAttribute と一緒に使う
+    → DTO内の @NotBlank, @Email などを実行させる
+
+
+  【DTOのフィールドにつけるもの（バリデーション）】
+  ─────────────────────────────────────────────────────
+  @NotBlank(message = "名前は必須です。")
+    → null・空文字・空白のみはNGにする
+
+  @Email(message = "メール形式が不正です。")
+    → メールアドレス形式かチェック
+
+  @Size(min = 2, message = "2文字以上で入力してください。")
+    → 文字数の最小・最大チェック
+
+  @Min(value = 0, message = "0以上の値を入力してください。")
+    → 数値の最小値チェック
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 5. ResponseEntity の使い方
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ResponseEntity = HTTPステータスコード + レスポンスボディ をセットで返すクラス
+
+  ResponseEntity.ok(body)
+    → 200 OK + body
+
+  ResponseEntity.status(HttpStatus.CREATED).body(body)
+    → 201 Created + body
+
+  ResponseEntity.noContent().build()
+    → 204 No Content（ボディなし）
+
+  ResponseEntity.notFound().build()
+    → 404 Not Found（ボディなし）
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 6. Controllerメソッドの書き方パターン
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  【GET 1件取得（パスパラメータ）】
+    @GetMapping("/{id}")
+    public ResponseEntity<UserResponse> getUserById(@PathVariable Integer id) {
+        User user = userService.findById(id);
+        return ResponseEntity.ok(new UserResponse(user));
+    }
+    // リクエスト: GET /users/1
+    // レスポンス: 200 OK + JSON
+
+  【GET 検索（クエリパラメータ）】
+    @GetMapping("/search")
+    public ResponseEntity<List<UserResponse>> searchUsers(
+            @Valid @ModelAttribute UserSearchCriteria criteria) {
+        List<User> users = userService.searchUsers(...);
+        List<UserResponse> responses = new ArrayList<>();
+        for (User user : users) {
+            responses.add(new UserResponse(user));
+        }
+        return ResponseEntity.ok(responses);
+    }
+    // リクエスト: GET /users/search?name=田中&email=tanaka@example.com
+    // レスポンス: 200 OK + JSONリスト（0件でも200）
+
+  【POST 新規作成（リクエストボディ）】
+    @PostMapping("")
+    public ResponseEntity<UserResponse> createUser(
+            @Valid @RequestBody UserRequest request) {
+        User user = new User(request.getName(), request.getEmail());
+        User created = userService.createUser(user);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                             .body(new UserResponse(created));
+    }
+    // リクエスト: POST /users + JSONボディ
+    // レスポンス: 201 Created + JSON
+
+  【PUT 更新（パスパラメータ + リクエストボディ）】
+    @PutMapping("/{id}")
+    public ResponseEntity<UserResponse> updateUser(
+            @PathVariable Integer id,
+            @Valid @RequestBody UserRequest request) {
+        User user = new User(request.getName(), request.getEmail());
+        User updated = userService.updateUser(id, user);
+        return ResponseEntity.ok(new UserResponse(updated));
+    }
+    // リクエスト: PUT /users/1 + JSONボディ
+    // レスポンス: 200 OK + JSON
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 7. JSONとJavaの対応
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  JSON                         Java
+  ─────────────────────────────────────────────────────
+  { "id": 1, "name": "田中" }  → クラス（フィールドがid, name）
+  [ {...}, {...}, {...} ]       → List<クラス>
+  "name": "田中"               → String name
+  "id": 1                      → Integer id
+  "isActive": true             → Boolean isActive
+
+  ※ SpringはJavaクラスのgetter名をJSONのキー名に使う
+    → getNameメソッド → "name" キー
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 8. 例外処理の仕組み
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  @RestControllerAdvice
+    → 全Controllerの例外をまとめてハンドリングするクラスに付ける
+
+  @ExceptionHandler(MethodArgumentNotValidException.class)
+    → @RequestBodyや@ModelAttributeのバリデーションエラー → 400
+
+  @ExceptionHandler(ConstraintViolationException.class)
+    → @RequestParamや@PathVariableのバリデーションエラー → 400
+
+  @ExceptionHandler(Exception.class)
+    → それ以外の全例外 → 500
+
+  ※ Controllerの中にエラー処理を書かなくていい！
+    GlobalExceptionHandlerが自動でエラーレスポンスを返してくれる
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 9. 実装の考える順番（毎回この順番で！）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  STEP 1: 何のデータを扱うか決める
+           → 例: ユーザー（id, name, email）
+
+  STEP 2: どんな操作が必要か決める
+           → 取得・作成・更新・削除（CRUD）
+
+  STEP 3: URL設計を決める
+           → /users, /users/{id}（名詞・複数形）
+
+  STEP 4: HTTPメソッドとステータスコードを決める
+           → GET=200, POST=201, PUT=200, DELETE=204
+
+  STEP 5: コードを書く順番
+           domain → dto → service → controller
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 10. curl コマンドでの動作確認
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  GET（取得）:
+    curl -v -f "http://localhost:8080/users/1"
+
+  GET（検索）:
+    curl -v -f "http://localhost:8080/users/search?name=田中"
+
+  POST（作成）:
+    curl -X POST -H "Content-Type: application/json" \
+         -d '{"name":"田中", "email":"tanaka@example.com"}' \
+         "http://localhost:8080/users"
+
+  PUT（更新）:
+    curl -X PUT -H "Content-Type: application/json" \
+         -d '{"name":"田中修正", "email":"tanaka2@example.com"}' \
+         "http://localhost:8080/users/1"
+
+  DELETE（削除）:
+    curl -X DELETE "http://localhost:8080/users/1"
+
+  よく使うオプション:
+    -v  : リクエスト/レスポンスのヘッダも表示
+    -f  : エラー時にエラーメッセージを表示
+    -X  : HTTPメソッドを指定
+    -H  : HTTPヘッダを指定
+    -d  : リクエストボディ（JSONなど）を指定
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 11. よくある間違い・注意点
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ❌ @RequestMappingをメソッドに使う
+     → REST APIではHTTPメソッドが区別できないので使わない
+     → @GetMapping / @PostMapping を使おう
+
+  ❌ @Valid を忘れる
+     → @NotBlankなどを書いてもValidが無いと動かない
+
+  ❌ POSTなのに200を返す
+     → 新規作成は 201 Created を返す
+
+  ❌ originsを"*"のままにする
+     → 本番では許可するオリジンを限定する
+
+  ❌ UserRequestをそのままServiceに渡す
+     → ServiceはDTOを知らなくていい
+     → ControllerでUserに変換してから渡す
+
+  ❌ getter/setterを書き忘れる
+     → SpringがJSONに変換するときgetterを使うので必須！
+
